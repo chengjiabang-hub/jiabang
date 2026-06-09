@@ -1,0 +1,54 @@
+name: 工程會大宗資材每月自動抓取與預警更新
+
+on:
+  # 1. 自動排程：設定每個月 25 號的早上 8 點（台灣時間）自動執行（工程會通常在月底發布）
+  schedule:
+    - cron: '0 0 25 * *'
+  
+  # 2. 手動觸發：讓您隨時可以在 GitHub 網頁上點擊 "Run workflow" 馬上執行測試
+  workflow_dispatch:
+
+jobs:
+  build_and_update:
+    runs-on: ubuntu-latest # 使用免費的 Linux 雲端伺服器
+
+    steps:
+    # 步驟一：將 GitHub 上的程式碼與歷史 history.xlsx 複製到雲端伺服器中
+    - name: 複製專案原始碼
+      uses: actions/checkout@v4
+
+    # 步驟二：安裝 Python 環境
+    - name: 設定 Python 環境
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+
+    # 步驟三：安裝 pdfplumber, pandas, openpyxl 等核心數據清洗與爬蟲套件
+    - name: 安装必要 Python 依賴套件
+      run: |
+        python -m pip install --upgrade pip
+        pip install pdfplumber pandas openpyxl selenium webdriver-manager
+
+    # 步驟四：執行您的爬蟲程式，自動去工程會官網下載最新的 PDF
+    # 備註：爬蟲下載下來的檔案通常會命名為如 "115.05.pdf" 並放在專案根目錄
+    - name: 執行自動化爬蟲下載最新 PDF
+      run: |
+        python crawler.py
+
+    # 步驟五：執行增量 Append 演算法
+    # 這會調用我們做好的「幾何網格還原法」，精準擷取新 PDF 並更新寫入 history.xlsx
+    # 如果漲幅超過 10%，也會在此步驟的日誌（Logs）中噴出紅色警告！
+    - name: 執行增量物價清洗與 10% 漲幅預警
+      run: |
+        python update_monthly.py
+
+    # 步驟六：最關鍵的一步！
+    # 雲端伺服器更新完 history.xlsx 後，必須把這個檔案「自動 Commit 並推回（Push）」您的 GitHub 帳號
+    # 這樣您的 history.xlsx 才會永遠保持最新狀態，Power BI 才能同步更新。
+    - name: 將更新後的 history.xlsx 自動推回 GitHub 儲存庫
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action Bot"
+        git add history.xlsx
+        # 檢查是否有新資料更新，有的話才進行 commit，防止空跑報錯
+        git diff --quiet && git diff --staged --quiet || (git commit -m "🤖 自動化更新：附加最新月份物價數據" && git push)
