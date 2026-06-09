@@ -42,13 +42,18 @@ jobs:
       run: |
         python update_monthly.py
 
-    # 步驟六：最關鍵的一步！
-    # 雲端伺服器更新完 history.xlsx 後，必須把這個檔案「自動 Commit 並推回（Push）」您的 GitHub 帳號
-    # 這樣您的 history.xlsx 才會永遠保持最新狀態，Power BI 才能同步更新。
+# 步驟六：優雅地檢查是否有新資料變更，有的話才進行 commit，防止空跑報錯亮紅燈
     - name: 將更新後的 history.xlsx 自動推回 GitHub 儲存庫
       run: |
         git config --local user.email "action@github.com"
         git config --local user.name "GitHub Action Bot"
-        git add history.xlsx
-        # 檢查是否有新資料更新，有的話才進行 commit，防止空跑報錯
-        git diff --quiet && git diff --staged --quiet || (git commit -m "🤖 自動化更新：附加最新月份物價數據" && git push)
+        
+        # 檢查 history.xlsx 是否有被程式修改過
+        if git diff --quiet history.xlsx; then
+          echo "🟩 檢查完畢：本次執行無新物資數據更新，歷史底稿已是最新狀態。"
+        else
+          echo "🔴 偵測到數據更新，啟動自動提交寫回程序..."
+          git add history.xlsx
+          git commit -m "🤖 自動化更新：附加最新月份物價數據"
+          git push
+        fi
